@@ -1417,8 +1417,10 @@ end
 -- cleanup
 -------------------------------------------------
 function cleanup()
+  state.playing = false
   midi_note_off()
   if redraw_metro then redraw_metro:stop() end
+  clock.cancel_all()
 end
 
 -------------------------------------------------

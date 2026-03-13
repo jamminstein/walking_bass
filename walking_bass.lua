@@ -100,6 +100,8 @@ local state = {
   ramp_active = false,
   ramp_start_tempo = 120,
   ramp_choruses_done = 0,
+  clean_bars = 0,
+  last_rest_occurred = false,
   -- screen
   screen_page = 1,
   screen_pages = {"play", "tone", "trainer"},
@@ -151,9 +153,9 @@ local total_bars = 0
 -- turnaround patterns (intervals from chord root for last 2 bars)
 local turnaround_patterns = {
   {name = "classic",    intervals = {{0, 4, 7, 10}, {0, 3, 7, 11}}},
-  {name = "chromatic",  intervals = {{0, 1, 2, 3},  {-1, 0, 1, 2}}},
-  {name = "tritone",    intervals = {{0, 6, 7, 1},  {-1, 0, 5, 7}}},
-  {name = "pedal",      intervals = {{0, 0, 7, 0},  {0, 7, 0, -1}}},
+  {name = "tritone_sub", intervals = {{0, 6, 7, 1},  {-1, 0, 5, 7}}},
+  {name = "coltrane",    intervals = {{0, -1, -5, -7}, {0, 4, 7, 10}}},
+  {name = "backdoor",    intervals = {{-2, -1, 0, 2}, {-4, -2, 0, 2}}},
 }
 
 -------------------------------------------------
@@ -540,7 +542,7 @@ local function build_walk_note(step_in_bar, chord, next_chord)
       w = w * 1.08
     end
     if math.abs(n - params:get("low_note"))  < 1 then w = w * 0.82 end
-    if math.abs(n - params:get("high_note")) < 1 then w = w * 0.78 end
+    if math.abs(n - params:get("high_note\")) < 1 then w = w * 0.78 end
     w = w * section_bias_weight(tag)
     table.insert(candidates, {n = n, w = w})
   end
@@ -740,17 +742,27 @@ end
 -------------------------------------------------
 local function tempo_trainer_check()
   if not state.ramp_active then return end
-  local ramp_bpm = params:get("ramp_bpm_per_chorus")
-  local max_tempo = params:get("ramp_max_tempo")
-  if ramp_bpm <= 0 then return end
-
-  state.ramp_choruses_done = state.ramp_choruses_done + 1
-  local new_tempo = state.ramp_start_tempo + (state.ramp_choruses_done * ramp_bpm)
-  if new_tempo > max_tempo then
-    new_tempo = max_tempo
-    state.ramp_active = false
+  
+  -- track clean bars (bars with no rests)
+  if not state.last_rest_occurred then
+    state.clean_bars = state.clean_bars + 1
+  else
+    state.clean_bars = 0
   end
-  params:set("tempo", math.floor(new_tempo))
+  state.last_rest_occurred = false
+  
+  -- after 8 clean bars, increase tempo
+  if state.clean_bars >= 8 then
+    state.clean_bars = 0
+    local increment = params:get("trainer_bpm_increment")
+    local max_tempo = params:get("trainer_max_tempo")
+    local new_tempo = math.min(params:get("tempo") + increment, max_tempo)
+    params:set("tempo", new_tempo)
+    if new_tempo >= max_tempo then
+      state.ramp_active = false
+    end
+    state.ramp_choruses_done = state.ramp_choruses_done + 1
+  end
 end
 
 -------------------------------------------------
@@ -786,6 +798,7 @@ local function play_step()
   local step_in_bar = ((state.beat - 1) % 4) + 1
 
   if should_rest(step_in_bar) then
+    state.last_rest_occurred = true
     screen_dirty = true
     grid_dirty = true
     return
@@ -892,8 +905,13 @@ local function reset_player()
   state.turnaround_flash = false
   state.turnaround_type = 1
   state.ramp_choruses_done = 0
+  state.clean_bars = 0
+  state.last_rest_occurred = false
   if state.ramp_active then
-    state.ramp_start_tempo = params:get("tempo")
+    -- start at 60% of target tempo
+    local target = params:get("trainer_start_tempo")
+    local start_tempo = math.floor(target * 0.6)
+    params:set("tempo", start_tempo)
   end
 end
 
@@ -1172,18 +1190,19 @@ function init()
     controlspec.new(0.0, 0.3, 'lin', 0, 0.05, ''))
 
   ----- TEMPO TRAINER -----
-  params:add_group("TEMPO TRAINER", 3)
+  params:add_group("TEMPO TRAINER", 4)
 
-  params:add_option("ramp_enabled", "tempo ramp", {"off", "on"}, 1)
-  params:set_action("ramp_enabled", function(x)
+  params:add_option("trainer_enabled", "tempo trainer", {"off", "on"}, 1)
+  params:set_action("trainer_enabled", function(x)
     state.ramp_active = (x == 2)
     if state.ramp_active then
-      state.ramp_start_tempo = params:get("tempo")
-      state.ramp_choruses_done = 0
+      state.clean_bars = 0
+      state.last_rest_occurred = false
     end
   end)
-  params:add_number("ramp_bpm_per_chorus", "bpm per chorus", 0, 10, 2)
-  params:add_number("ramp_max_tempo", "max tempo", 80, 300, 200)
+  params:add_number("trainer_start_tempo", "start tempo", 60, 180, 120)
+  params:add_number("trainer_bpm_increment", "bpm per 8 bars", 1, 10, 3)
+  params:add_number("trainer_max_tempo", "max tempo", 80, 300, 200)
 
   ----- MIDI -----
   params:add_group("MIDI OUT", 2)
@@ -1230,19 +1249,19 @@ function key(n, z)
       state.playing = false
       midi_note_off()
     else
-      if params:get("ramp_enabled") == 2 then
+      if params:get("trainer_enabled") == 2 then
         state.ramp_active = true
-        state.ramp_start_tempo = params:get("tempo")
-        state.ramp_choruses_done = 0
+        state.clean_bars = 0
+        state.last_rest_occurred = false
       end
       start_count_in()
     end
   elseif n == 3 then
     reset_player()
-    if params:get("ramp_enabled") == 2 then
+    if params:get("trainer_enabled") == 2 then
       state.ramp_active = true
-      state.ramp_start_tempo = params:get("tempo")
-      state.ramp_choruses_done = 0
+      state.clean_bars = 0
+      state.last_rest_occurred = false
     end
     start_count_in()
   end
@@ -1280,12 +1299,12 @@ local function draw_page_play()
     screen.text(state.playing and "playing" or "stopped")
   end
 
-  -- tempo (with ramp indicator)
+  -- tempo (with trainer indicator)
   screen.level(8)
   screen.move(8, 33)
   local tempo_str = "tempo " .. params:get("tempo")
   if state.ramp_active then
-    tempo_str = tempo_str .. " ^"
+    tempo_str = tempo_str .. " (trainer)"
   end
   screen.text(tempo_str)
 
@@ -1366,32 +1385,32 @@ local function draw_page_trainer()
 
   screen.level(8)
   screen.move(4, 22)
-  screen.text("ramp: " .. (state.ramp_active and "ON" or "off"))
+  screen.text("trainer: " .. (state.ramp_active and "ON" or "off"))
 
   screen.move(4, 33)
-  screen.text("+" .. params:get("ramp_bpm_per_chorus") .. " bpm/chorus")
+  screen.text("start: " .. params:get("trainer_start_tempo") .. " bpm")
 
   screen.move(4, 44)
-  screen.text("max: " .. params:get("ramp_max_tempo") .. " bpm")
+  screen.text("+" .. params:get("trainer_bpm_increment") .. " per 8 bars")
 
-  screen.level(12)
   screen.move(4, 55)
-  screen.text("now: " .. params:get("tempo") .. " bpm")
+  screen.text("max: " .. params:get("trainer_max_tempo") .. " bpm")
 
   if state.ramp_active then
-    screen.level(6)
+    screen.level(12)
     screen.move(82, 22)
-    screen.text("ch " .. state.ramp_choruses_done)
+    screen.text("current: " .. params:get("tempo"))
+    screen.level(6)
+    screen.move(82, 33)
+    screen.text("clean: " .. state.clean_bars .. "/8")
+    screen.move(82, 44)
+    screen.text("chorus " .. state.ramp_choruses_done)
   end
 
   -- midi status
   screen.level(6)
-  screen.move(82, 44)
+  screen.move(82, 55)
   screen.text("midi " .. (params:get("midi_enabled") == 2 and "on" or "off"))
-  if params:get("midi_enabled") == 2 then
-    screen.move(82, 55)
-    screen.text("ch " .. params:get("midi_channel"))
-  end
 
   -- page dots
   for i = 1, #state.screen_pages do

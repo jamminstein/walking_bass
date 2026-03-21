@@ -230,6 +230,13 @@ local function fmt_note(param)
   return note_name(param:get())
 end
 
+local function truncate_text(str, max_len)
+  if string.len(str) > max_len then
+    return string.sub(str, 1, max_len - 1) .. "~"
+  end
+  return str
+end
+
 -------------------------------------------------
 -- progression map
 -------------------------------------------------
@@ -253,12 +260,20 @@ local function current_bar_in_form()
 end
 
 local function get_current_chord()
-  return progression_bar_map[current_bar_in_form()] or progression.chords[1]
+  local chord_map = progression_bar_map[current_bar_in_form()]
+  if not chord_map then
+    return progression.chords[1] or {root = 36, quality = "ionian", dur = 1}
+  end
+  return chord_map
 end
 
 local function get_next_chord()
   local next_bar = (current_bar_in_form() % total_bars) + 1
-  return progression_bar_map[next_bar]
+  local chord_map = progression_bar_map[next_bar]
+  if not chord_map then
+    return progression.chords[1] or {root = 36, quality = "ionian", dur = 1}
+  end
+  return chord_map
 end
 
 local function get_scale_for_chord(chord)
@@ -1367,7 +1382,7 @@ local function draw_page_play()
   local chord = get_current_chord()
   screen.level(12)
   screen.move(64, 6)
-  screen.text_center(note_name_short(chord.root) .. " " .. chord.quality)
+  screen.text_center(truncate_text(note_name_short(chord.root) .. " " .. chord.quality, 18))
 
   -- Beat pulse dot at x=124
   local beat_pulse_brightness = math.floor(state.beat_phase * 15)
@@ -1388,12 +1403,12 @@ local function draw_page_play()
   -- Chord at level 8
   screen.level(8)
   screen.move(8, 55)
-  screen.text(note_name(chord.root))
+  screen.text(truncate_text(note_name(chord.root), 4))
 
   -- Approach mode at level 5
   screen.level(5)
   screen.move(45, 55)
-  screen.text(state.section)
+  screen.text(truncate_text(state.section, 8))
 
   -- BPM at level 8 (bright when trainer active)
   local tempo_level = state.ramp_active and 15 or 8
@@ -1404,7 +1419,7 @@ local function draw_page_play()
   -- Turnaround type at level 5
   screen.level(5)
   screen.move(105, 55)
-  screen.text(turnaround_patterns[state.turnaround_type].name)
+  screen.text(truncate_text(turnaround_patterns[state.turnaround_type].name, 9))
 
   -- ==================
   -- TEMPO TRAINER INFO (right side)
@@ -1459,10 +1474,10 @@ local function draw_page_tone()
   for i, item in ipairs(items) do
     screen.level(6)
     screen.move(4, 10 + i * 9)
-    screen.text(item[1])
+    screen.text(truncate_text(item[1], 6))
     screen.level(12)
     screen.move(50, 10 + i * 9)
-    screen.text(item[2])
+    screen.text(truncate_text(item[2], 10))
   end
 
   -- page dots
@@ -1534,7 +1549,9 @@ function cleanup()
   clock.cancel_all()
   state.playing = false
   midi_note_off()
-  if redraw_metro then redraw_metro:stop() end
+  if redraw_metro then
+    redraw_metro:stop()
+  end
 end
 
 -------------------------------------------------

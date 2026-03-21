@@ -186,6 +186,38 @@ local midi_out
 local midi_channel = 1
 
 -------------------------------------------------
+-- OP-XY MIDI
+-------------------------------------------------
+local opxy_out = nil
+local opxy_enabled = false
+local opxy_device = 1
+local opxy_channel = 2  -- OP-XY default bass channel
+
+local function opxy_note_on(note, vel)
+  if opxy_out and opxy_enabled then
+    opxy_out:note_on(note, vel, opxy_channel)
+  end
+end
+
+local function opxy_note_off(note)
+  if opxy_out and opxy_enabled then
+    opxy_out:note_off(note, 0, opxy_channel)
+  end
+end
+
+local function opxy_cc(cc_num, val)
+  if opxy_out and opxy_enabled then
+    opxy_out:cc(cc_num, math.floor(util.clamp(val, 0, 127)), opxy_channel)
+  end
+end
+
+local function opxy_all_notes_off()
+  if opxy_out and opxy_enabled then
+    opxy_out:cc(123, 0, opxy_channel)
+  end
+end
+
+-------------------------------------------------
 -- metros / clocks
 -------------------------------------------------
 local redraw_metro
@@ -423,7 +455,7 @@ local function note_decay(note, articulation)
 end
 
 -------------------------------------------------
--- note trigger (unified: engine + MIDI)
+-- note trigger (unified: engine + MIDI + OP-XY)
 -------------------------------------------------
 local function perform_note(note, velocity, gate_beats, articulation)
   local freq = MusicUtil.note_num_to_freq(note)
@@ -433,12 +465,15 @@ local function perform_note(note, velocity, gate_beats, articulation)
   engine_note(freq, amp, decay, articulation)
   midi_note_off()
   midi_note_on(note, math.floor(velocity))
+  opxy_note_off(note)
+  opxy_note_on(note, math.floor(velocity))
 
   -- schedule MIDI note-off
-  if params:get("midi_enabled") == 2 then
+  if params:get("midi_enabled") == 2 or opxy_enabled then
     clock.run(function()
       clock.sleep(gate_beats * (60 / clock.tempo) * 0.9)
       midi_note_off()
+      opxy_note_off(note)
     end)
   end
 end
@@ -858,6 +893,10 @@ local function play_step()
     perform_note(note, velocity, gate, articulation)
   end)
 
+  -- Update OP-XY filter/tone CCs
+  opxy_cc(32, util.linlin(260, 2400, 0, 127, register_tone(note)))
+  opxy_cc(46, util.linlin(0, 1, 0, 127, params:get("body_tone") / 2200))
+
   screen_dirty = true
   grid_dirty = true
 end
@@ -917,6 +956,7 @@ end
 -------------------------------------------------
 local function reset_player()
   midi_note_off()
+  opxy_all_notes_off()
   state.beat = 0
   state.bar = 1
   state.chorus = 1
@@ -1299,6 +1339,23 @@ function init()
   params:add_number("midi_channel", "midi channel", 1, 16, 1)
   params:set_action("midi_channel", function(x) midi_channel = x end)
 
+  ----- OP-XY -----
+  params:add_group("OP-XY", 3)
+
+  params:add_option("opxy_enabled", "OP-XY output", {"off", "on"}, 1)
+  params:set_action("opxy_enabled", function(x) 
+    opxy_enabled = (x == 2)
+    if opxy_out == nil then
+      opxy_out = midi.connect(params:get("opxy_device"))
+    end
+  end)
+  params:add_number("opxy_device", "OP-XY MIDI device", 1, 4, 1)
+  params:set_action("opxy_device", function(val)
+    opxy_out = midi.connect(val)
+  end)
+  params:add_number("opxy_channel", "OP-XY channel", 1, 8, 2)
+  params:set_action("opxy_channel", function(x) opxy_channel = x end)
+
   ----- INIT -----
   init_custom_chart()
   apply_root_offset(params:get("root"))
@@ -1336,6 +1393,7 @@ function key(n, z)
     if state.playing then
       state.playing = false
       midi_note_off()
+      opxy_all_notes_off()
     else
       if params:get("trainer_enabled") == 2 then
         state.ramp_active = true
@@ -1549,6 +1607,7 @@ function cleanup()
   clock.cancel_all()
   state.playing = false
   midi_note_off()
+  opxy_all_notes_off()
   if redraw_metro then
     redraw_metro:stop()
   end
@@ -1565,5 +1624,6 @@ end
 function clock.transport.stop()
   state.playing = false
   midi_note_off()
+  opxy_all_notes_off()
   screen_dirty = true
 end

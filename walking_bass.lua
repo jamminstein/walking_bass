@@ -444,7 +444,7 @@ local function setup_engine_defaults()
     engine.reverb_room(params:get("reverb_room"))
   elseif current_engine == "AcidTest" then
     -- Initialize AcidTest delay if configured
-    if params:has("acid_delay_feedback") then
+    if pcall(function() params:get("acid_delay_feedback") end) then
       engine.acidTest_delay(60 / clock.get_tempo(), params:get("acid_delay_beats"), params:get("acid_delay_feedback"))
     end
   end

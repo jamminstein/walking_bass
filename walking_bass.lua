@@ -247,6 +247,7 @@ end
 -- metros / clocks
 -------------------------------------------------
 local redraw_metro
+local transport_clock_id = nil
 local screen_dirty = true
 
 -------------------------------------------------
@@ -1488,7 +1489,7 @@ function init()
 
   clock.tempo = params:get("tempo")
   reset_player()
-  clock.run(transport_loop)
+  transport_clock_id = clock.run(transport_loop)
 
   -- setup engine abstraction layer
   setup_engine_abstraction()
@@ -1738,11 +1739,12 @@ end
 -- cleanup
 -------------------------------------------------
 function cleanup()
-  clock.cancel_all()
+  if transport_clock_id then clock.cancel(transport_clock_id) end
   state.playing = false
   midi_note_off()
   opxy_all_notes_off()
   if eng.kill_all then eng.kill_all() end
+  if midi_out then for ch=1,16 do midi_out:cc(123,0,ch) end end
   if redraw_metro then
     redraw_metro:stop()
   end

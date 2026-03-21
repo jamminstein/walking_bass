@@ -99,6 +99,7 @@ local state = {
   chorus = 1,
   last_note = 36,
   last_midi_note = nil,
+  last_opxy_note = nil,
   last_interval = 0,
   target_note = 36,
   direction = 1,
@@ -551,15 +552,19 @@ local function perform_note(note, velocity, gate_beats, articulation)
   engine_note(freq, amp, decay, articulation)
   midi_note_off()
   midi_note_on(note, math.floor(velocity))
-  opxy_note_off(note)
+  if state.last_opxy_note then
+    opxy_note_off(state.last_opxy_note)
+  end
   opxy_note_on(note, math.floor(velocity))
+  state.last_opxy_note = note
 
   -- schedule MIDI note-off
   if params:get("midi_enabled") == 2 or opxy_enabled then
+    local scheduled_opxy_note = note
     clock.run(function()
       clock.sleep(gate_beats * (60 / clock.tempo) * 0.9)
       midi_note_off()
-      opxy_note_off(note)
+      opxy_note_off(scheduled_opxy_note)
     end)
   end
 end
@@ -1048,6 +1053,7 @@ local function reset_player()
   state.chorus = 1
   state.last_note = params:get("root")
   state.last_midi_note = nil
+  state.last_opxy_note = nil
   state.last_interval = 0
   state.target_note = state.last_note
   state.direction = 1

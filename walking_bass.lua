@@ -1230,7 +1230,7 @@ end
 local function draw_melodic_contour()
   if #note_history == 0 then return end
   
-  screen.aa(1)  -- anti-alias for smooth contour
+  screen.aa(0)  -- anti-alias for smooth contour
   local start_x = 10
   local end_x = 118
   local width = end_x - start_x

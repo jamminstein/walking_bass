@@ -294,6 +294,7 @@ local function rebuild_progression_map()
 end
 
 local function current_bar_in_form()
+  if total_bars < 1 then return 1 end
   return ((state.bar - 1) % total_bars) + 1
 end
 

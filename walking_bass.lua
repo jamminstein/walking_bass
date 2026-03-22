@@ -449,10 +449,14 @@ local function shape_note_filter(note)
   local range = hi - lo
   if range <= 0 then range = 24 end
   local pos = clamp((note - lo) / range, 0, 1)
-  -- low notes dark, high notes brighter
+  -- low notes dark, high notes brighter + random variation
   local cutoff = state.brightness_base * (0.5 + pos * 1.5)
-  cutoff = clamp(cutoff, 400, 4000)
+  cutoff = cutoff + math.random(-200, 200)  -- timbre variation per note
+  cutoff = clamp(cutoff, 400, 5000)
   params:set("lp_filter_cutoff", cutoff)
+  -- vary pulse width slightly for each note (organic feel)
+  local pw = 0.3 + math.random() * 0.25
+  params:set("osc_wave_shape", pw)
 end
 
 -------------------------------------------------
@@ -497,18 +501,59 @@ local function perform_note(note, vel_float, duration_sec)
     end)
   end
 
-  -- LAYER 3: Octave breath (~10% on beats 1 & 3)
+  -- LAYER 3: Octave variation (~15% chance)
+  -- sometimes drop an octave for depth, sometimes pop up for brightness
   local step_in_bar = ((state.beat - 1) % 4) + 1
-  if chance(0.10) and (step_in_bar == 1 or step_in_bar == 3) then
-    local oct_freq = freq * 2
-    local oct_vel = clamp(vel * 0.18, 0.05, 0.2)
-    local oct_vid = get_voice_id()
-    clock.run(function()
-      clock.sleep(0.01)
-      engine.noteOn(oct_vid, oct_freq, oct_vel)
-      clock.sleep(rrange(0.03, 0.06))
-      engine.noteOff(oct_vid)
-    end)
+  if chance(0.15) then
+    local oct_shift = ({-12, 12, 12, 19, 24})[math.random(5)]  -- -oct, +oct, +oct, +oct+5th, +2oct
+    local oct_note = note + oct_shift
+    if oct_note >= 24 and oct_note <= 96 then
+      local oct_freq = MusicUtil.note_num_to_freq(oct_note)
+      local oct_vel = clamp(vel * rrange(0.12, 0.22), 0.05, 0.25)
+      local oct_vid = get_voice_id()
+      clock.run(function()
+        clock.sleep(rrange(0.005, 0.02))
+        engine.noteOn(oct_vid, oct_freq, oct_vel)
+        clock.sleep(rrange(0.04, 0.1))
+        engine.noteOff(oct_vid)
+      end)
+    end
+  end
+
+  -- LAYER 4: Organ comping (subtle jazz chords on beats 1 & 3)
+  -- voiced like a Hammond B3 — rootless voicings with 3rds, 7ths, 9ths, 13ths
+  if chance(0.6) and (step_in_bar == 1 or step_in_bar == 3) then
+    local chord = get_current_chord()
+    if chord then
+      local root = chord.root or note
+      -- rootless jazz voicings: 3rd, 7th, 9th (or 3rd, 6th, 9th)
+      local voicings = {
+        {3, 10, 14},     -- min7: b3, b7, 9
+        {4, 11, 14},     -- maj7: 3, 7, 9
+        {4, 10, 14},     -- dom7: 3, b7, 9
+        {3, 10, 14, 17}, -- min9: b3, b7, 9, 11
+        {4, 10, 13},     -- dom13: 3, b7, b13
+        {3, 7, 10},      -- min: b3, 5, b7
+      }
+      local v = voicings[math.random(#voicings)]
+      -- place chord in mid register (MIDI 60-72 range)
+      local chord_base = 60 + (root % 12)
+      local chord_vel = clamp(vel * rrange(0.08, 0.15), 0.03, 0.18)
+      local chord_dur = rrange(0.6, 1.2)  -- sustained, organ-like
+      for _, interval in ipairs(v) do
+        local cn = chord_base + interval
+        if cn <= 84 then
+          local cvid = get_voice_id()
+          local cf = MusicUtil.note_num_to_freq(cn)
+          clock.run(function()
+            clock.sleep(rrange(0.01, 0.04))  -- slight stagger for human feel
+            engine.noteOn(cvid, cf, chord_vel)
+            clock.sleep(chord_dur + rrange(-0.1, 0.1))
+            engine.noteOff(cvid)
+          end)
+        end
+      end
+    end
   end
 
   -- MIDI out

@@ -501,23 +501,36 @@ local function perform_note(note, velocity, gate_beats, articulation)
   local amp = vel_to_amp(velocity)
   local decay = note_decay(note, articulation) * gate_beats * 1.8
 
-  -- Shape sound per articulation
-  local cut = 1200
+  -- Shape sound per articulation + velocity-responsive filter
+  local vel_factor = amp / 0.8  -- normalized around typical amp
+  local cut = 800 + vel_factor * 1200 + math.random(-200, 200)
   local rel = math.max(0.15, decay * 0.5)
-  local pw = 0.4
+  local pw = 0.35 + math.random() * 0.15
   if articulation == "ghost" then
-    cut = 600; rel = 0.1; pw = 0.5
+    cut = 400 + math.random(0, 200)
+    rel = 0.08 + math.random() * 0.04
+    pw = 0.48 + math.random() * 0.04
   elseif articulation == "dig" then
-    cut = 3000; rel = math.max(0.2, decay * 0.6); pw = 0.3
+    cut = 2500 + math.random(0, 1000)
+    rel = math.max(0.2, decay * 0.7)
+    pw = 0.25 + math.random() * 0.1
   elseif articulation == "sing" then
-    cut = 1600; rel = math.max(0.3, decay * 0.8); pw = 0.45
+    cut = 1400 + math.random(0, 400)
+    rel = math.max(0.4, decay * 0.9)
+    pw = 0.42 + math.random() * 0.06
   elseif articulation == "staccato" then
-    cut = 2000; rel = 0.08; pw = 0.35
+    cut = 1800 + math.random(0, 600)
+    rel = 0.06 + math.random() * 0.03
+    pw = 0.3 + math.random() * 0.1
+  elseif articulation == "lead_in" then
+    cut = 2000 + math.random(0, 500)
+    rel = math.max(0.25, decay * 0.65)
+    pw = 0.38 + math.random() * 0.08
   end
   engine.pw(pw)
   engine.release(rel)
   engine.cutoff(cut)
-  engine.amp(0.8)
+  engine.amp(math.min(1.0, amp * 1.2))
   engine.hz(freq)
   print("WB NOTE: " .. note .. " freq=" .. math.floor(freq) .. " amp=" .. string.format("%.2f", amp))
   midi_note_off()
@@ -742,13 +755,14 @@ end
 -- rhythm / articulation / feel
 -------------------------------------------------
 local function should_rest(step_in_bar)
-  local p = (1 - state.density) * 0.08
-  if step_in_bar == 1  then p = p * 0.18 end
+  local p = (1 - state.density) * 0.15
+  if step_in_bar == 1  then p = p * 0.1 end  -- almost never rest on beat 1
+  if step_in_bar == 3  then p = p + 0.06 end  -- occasional rest on beat 3 = jazz
   if state.section == "trade" then
-    if step_in_bar >= 3 then p = p + 0.08 end
+    if step_in_bar >= 3 then p = p + 0.12 end
   end
-  if state.solo_mode   then p = p + 0.03  end
-  if state.rest_streak > 0 then p = p * 0.4 end
+  if state.solo_mode   then p = p + 0.06  end
+  if state.rest_streak > 0 then p = p * 0.3 end  -- don't rest twice in a row often
   local rest = chance(p)
   if rest then
     state.rest_streak = state.rest_streak + 1
@@ -1335,11 +1349,11 @@ function init()
   params:add_group("FEEL", 5)
 
   params:add_number("base_velocity", "touch", 20, 120, 72)
-  params:add_number("humanity_ms", "humanity ms", 0, 45, 12, fmt_ms)
+  params:add_number("humanity_ms", "humanity ms", 0, 45, 25, fmt_ms)
   params:add_control("pocket_depth", "pocket depth ms",
-    controlspec.new(0, 18, 'lin', 0, 6, 'ms'))
+    controlspec.new(0, 18, 'lin', 0, 10, 'ms'))
   params:add_control("swing", "swing",
-    controlspec.new(0, 0.4, 'lin', 0, 0.085, ''))
+    controlspec.new(0, 0.4, 'lin', 0, 0.18, ''))
   params:add_control("turnaround_intensity", "turnaround",
     controlspec.new(0, 1, 'lin', 0, 0.4, ''))
 

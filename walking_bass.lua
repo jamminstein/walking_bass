@@ -403,8 +403,13 @@ local function engine_note(freq, amp, decay, articulation_name)
 end
 
 local function engine_click(freq, amp)
-  -- Click sound via short PolyPerc hit
-  engine.hz(freq)
+  -- Click via short MollyThePoly note
+  local click_id = 9999
+  engine.noteOn(click_id, freq, math.min(1.0, amp))
+  clock.run(function()
+    clock.sleep(0.05)
+    engine.noteOff(click_id)
+  end)
 end
 
 local function setup_engine_defaults()

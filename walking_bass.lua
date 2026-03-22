@@ -1658,9 +1658,14 @@ local function draw_style()
   screen.stroke()
   screen.level(5)
   screen.move(2, 63)
-  screen.text("E2:style  E3:bpm  K3:morph")
+  screen.text("E1:style  E2:style  E3:bpm")
 
-  draw_page_dots()
+  -- page dots inline
+  for i = 1, #state.pages do
+    if i == state.page then screen.level(15) else screen.level(3) end
+    screen.rect(54 + (i - 1) * 8, 62, 4, 2)
+    screen.fill()
+  end
 end
 
 -------------------------------------------------

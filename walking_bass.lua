@@ -1319,17 +1319,8 @@ function init()
 
   ----- ENGINE -----
   params:add_separator("ENGINE")
-  local eng_idx = 1
-  for i, name in ipairs(ENGINE_OPTIONS) do
-    if name == current_engine then eng_idx = i end
-  end
-  params:add_option("engine_select", "sound engine", ENGINE_OPTIONS, eng_idx)
+  params:add_option("engine_select", "sound engine", {"MollyThePoly"}, 1)
   params:set_action("engine_select", function(val)
-    local new_engine = ENGINE_OPTIONS[val]
-    if new_engine ~= current_engine then
-      save_engine_choice(new_engine)
-      norns.script.load(norns.state.script)
-    end
   end)
 
   ----- TONE -----

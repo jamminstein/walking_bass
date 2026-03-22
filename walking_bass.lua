@@ -517,8 +517,8 @@ local function perform_note(note, velocity, gate_beats, articulation)
   local amp = vel_to_amp(velocity)
   local decay = note_decay(note, articulation) * gate_beats * 1.8
 
-  -- Direct MollyThePoly call for reliable sound
-  local vel = math.max(0.2, math.min(1.0, amp))
+  -- === LAYER 1: Root walker (main voice) ===
+  local vel = math.max(0.25, math.min(1.0, amp))
   local vid = next_voice_id
   engine.noteOn(vid, freq, vel)
   clock.run(function()
@@ -530,7 +530,39 @@ local function perform_note(note, velocity, gate_beats, articulation)
     clock.sleep(rel)
     engine.noteOff(vid)
   end)
-  next_voice_id = (next_voice_id % 8) + 1
+  next_voice_id = (next_voice_id % 12) + 1
+
+  -- === LAYER 2: Ghost doubles (chromatic approach, double-stops) ===
+  -- ~25% chance, quieter, slightly delayed
+  if math.random() < 0.25 and articulation ~= "ghost" then
+    local ghost_interval = ({-1, 1, -2, 2, 7, 12})[math.random(6)]
+    local ghost_freq = MusicUtil.note_num_to_freq(note + ghost_interval)
+    local ghost_vel = vel * 0.35
+    local ghost_vid = next_voice_id
+    next_voice_id = (next_voice_id % 12) + 1
+    clock.run(function()
+      clock.sleep(0.02 + math.random() * 0.04)  -- slight lag behind main note
+      engine.noteOn(ghost_vid, ghost_freq, ghost_vel)
+      clock.sleep(0.06 + math.random() * 0.08)
+      engine.noteOff(ghost_vid)
+    end)
+  end
+
+  -- === LAYER 3: Octave breath (high harmonic pops) ===
+  -- ~12% chance on strong beats, bright and short
+  local step_in_bar = ((state.beat - 1) % 4) + 1
+  if math.random() < 0.12 and (step_in_bar == 1 or step_in_bar == 3) then
+    local oct_freq = freq * 2  -- one octave up
+    local oct_vel = vel * 0.2
+    local oct_vid = next_voice_id
+    next_voice_id = (next_voice_id % 12) + 1
+    clock.run(function()
+      clock.sleep(0.01)
+      engine.noteOn(oct_vid, oct_freq, oct_vel)
+      clock.sleep(0.04 + math.random() * 0.03)
+      engine.noteOff(oct_vid)
+    end)
+  end
   midi_note_off()
   midi_note_on(note, math.floor(velocity))
   if state.last_opxy_note then

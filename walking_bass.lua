@@ -501,9 +501,22 @@ local function perform_note(note, velocity, gate_beats, articulation)
   local amp = vel_to_amp(velocity)
   local decay = note_decay(note, articulation) * gate_beats * 1.8
 
-  -- Direct PolyPerc call as backup
-  engine.release(math.max(0.1, decay * 0.4))
-  engine.cutoff(1800)
+  -- Shape sound per articulation
+  local cut = 1200
+  local rel = math.max(0.15, decay * 0.5)
+  local pw = 0.4
+  if articulation == "ghost" then
+    cut = 600; rel = 0.1; pw = 0.5
+  elseif articulation == "dig" then
+    cut = 3000; rel = math.max(0.2, decay * 0.6); pw = 0.3
+  elseif articulation == "sing" then
+    cut = 1600; rel = math.max(0.3, decay * 0.8); pw = 0.45
+  elseif articulation == "staccato" then
+    cut = 2000; rel = 0.08; pw = 0.35
+  end
+  engine.pw(pw)
+  engine.release(rel)
+  engine.cutoff(cut)
   engine.amp(0.8)
   engine.hz(freq)
   print("WB NOTE: " .. note .. " freq=" .. math.floor(freq) .. " amp=" .. string.format("%.2f", amp))

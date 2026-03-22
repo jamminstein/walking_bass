@@ -501,7 +501,12 @@ local function perform_note(note, velocity, gate_beats, articulation)
   local amp = vel_to_amp(velocity)
   local decay = note_decay(note, articulation) * gate_beats * 1.8
 
-  engine_note(freq, amp, decay, articulation)
+  -- Direct PolyPerc call as backup
+  engine.release(math.max(0.1, decay * 0.4))
+  engine.cutoff(1800)
+  engine.amp(0.8)
+  engine.hz(freq)
+  print("WB NOTE: " .. note .. " freq=" .. math.floor(freq) .. " amp=" .. string.format("%.2f", amp))
   midi_note_off()
   midi_note_on(note, math.floor(velocity))
   if state.last_opxy_note then

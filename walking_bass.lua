@@ -1613,57 +1613,67 @@ end
 -------------------------------------------------
 local function draw_style()
   local s = get_style()
+  screen.font_size(8)
+
   -- Header
   screen.level(15)
   screen.move(2, 7)
   screen.text("STYLE")
   screen.level(state.playing and 15 or 4)
-  screen.move(120, 7)
+  screen.move(108, 7)
   screen.text(state.playing and ">" or ".")
+  -- morph indicator
+  if current_style == #STYLES then
+    screen.level(math.floor(math.sin(os.clock() * 3) * 5) + 10)
+    screen.move(116, 7)
+    screen.text("M")
+  end
   screen.level(2)
   screen.move(0, 9)
   screen.line(128, 9)
   screen.stroke()
 
-  -- Style name large
-  screen.level(15)
-  screen.font_size(12)
-  screen.move(4, 24)
-  screen.text(s.name)
-  screen.font_size(8)
-
-  -- Style params visualization
-  local params_y = 30
-  local function draw_bar(label, val, max_val, y)
-    screen.level(6)
-    screen.move(2, y + 6)
-    screen.text(label)
-    screen.level(3)
-    screen.rect(42, y + 1, 80, 4)
-    screen.stroke()
-    screen.level(10)
-    local w = math.floor((val / max_val) * 78)
-    screen.rect(43, y + 2, w, 2)
-    screen.fill()
+  -- Style list (show 5 styles centered on current)
+  for i = -2, 2 do
+    local idx = current_style + i
+    if idx >= 1 and idx <= #STYLES then
+      local y = 30 + i * 9
+      if i == 0 then
+        -- current style: highlighted
+        screen.level(1)
+        screen.rect(0, y - 6, 128, 9)
+        screen.fill()
+        screen.level(15)
+        screen.move(4, y)
+        screen.text(STYLES[idx].name)
+        screen.level(8)
+        screen.move(100, y)
+        screen.text(STYLES[idx].bpm)
+      else
+        screen.level(4)
+        screen.move(8, y)
+        screen.text(STYLES[idx].name)
+      end
+    end
   end
-  draw_bar("BPM",    s.bpm,          220, params_y)
-  draw_bar("SWING",  s.swing,        0.3, params_y + 7)
-  draw_bar("GHOST",  s.ghost_pct,    0.5, params_y + 14)
-  draw_bar("ORGAN",  s.organ_pct,    1.0, params_y + 21)
 
-  -- Style list at bottom
+  -- Bottom bar
   screen.level(2)
   screen.move(0, 55)
   screen.line(128, 55)
   screen.stroke()
-  screen.level(5)
-  screen.move(2, 63)
-  screen.text("E1:style  E2:style  E3:bpm")
 
-  -- page dots inline
+  screen.level(6)
+  screen.move(2, 63)
+  screen.text("E2:style  E3:bpm")
+  screen.level(current_style == #STYLES and 15 or 5)
+  screen.move(88, 63)
+  screen.text("K3:morph")
+
+  -- page dots
   for i = 1, #state.pages do
-    if i == state.page then screen.level(15) else screen.level(3) end
-    screen.rect(54 + (i - 1) * 8, 62, 4, 2)
+    screen.level(i == state.page and 15 or 3)
+    screen.rect(54 + (i - 1) * 8, 58, 4, 2)
     screen.fill()
   end
 end
@@ -1713,8 +1723,21 @@ function key(n, z)
     end
 
   elseif n == 3 then
-    -- K3: cycle pages
-    state.page = (state.page % #state.pages) + 1
+    if state.page == 4 then
+      -- K3 on STYLE page: toggle morphing
+      if current_style == #STYLES then
+        stop_morphing()
+        current_style = 1
+        apply_style(get_style())
+      else
+        current_style = #STYLES
+        apply_style(get_style())
+        start_morphing()
+      end
+    else
+      -- K3 on other pages: cycle pages
+      state.page = (state.page % #state.pages) + 1
+    end
   end
 
   screen_dirty = true

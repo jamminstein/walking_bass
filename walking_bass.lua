@@ -39,6 +39,113 @@ local BRIGHT = {
   FULL   = 15,
 }
 
+-------------------------------------------------
+-- JAZZ STYLES
+-------------------------------------------------
+local STYLES = {
+  -- Historical jazz eras
+  { name = "SWING ERA",       -- 1930s-40s: Count Basie, Duke Ellington
+    bpm = 145, swing = 0.22, ghost_pct = 0.15, organ_pct = 0.70,
+    oct_pct = 0.08, rest_pct = 0.03, eighth_pct = 0.08,
+    cutoff_base = 900, release_base = 1.0 },
+  { name = "BEBOP",           -- 1940s-50s: Charlie Parker, Dizzy, Mingus
+    bpm = 190, swing = 0.08, ghost_pct = 0.35, organ_pct = 0.35,
+    oct_pct = 0.22, rest_pct = 0.10, eighth_pct = 0.35,
+    cutoff_base = 2200, release_base = 0.3 },
+  { name = "COOL JAZZ",       -- 1950s: Miles (Birth of Cool), Chet Baker, Bill Evans
+    bpm = 108, swing = 0.12, ghost_pct = 0.18, organ_pct = 0.60,
+    oct_pct = 0.10, rest_pct = 0.08, eighth_pct = 0.10,
+    cutoff_base = 1000, release_base = 1.1 },
+  { name = "HARD BOP",        -- 1955-65: Art Blakey, Horace Silver, Cannonball
+    bpm = 155, swing = 0.18, ghost_pct = 0.28, organ_pct = 0.55,
+    oct_pct = 0.15, rest_pct = 0.05, eighth_pct = 0.20,
+    cutoff_base = 1500, release_base = 0.6 },
+  { name = "MODAL",           -- 1959-65: Miles (Kind of Blue), Coltrane
+    bpm = 120, swing = 0.14, ghost_pct = 0.20, organ_pct = 0.65,
+    oct_pct = 0.12, rest_pct = 0.06, eighth_pct = 0.12,
+    cutoff_base = 1100, release_base = 0.9 },
+  { name = "FREE",            -- 1960s: Ornette Coleman, Cecil Taylor, late Coltrane
+    bpm = 95, swing = 0.04, ghost_pct = 0.42, organ_pct = 0.70,
+    oct_pct = 0.30, rest_pct = 0.18, eighth_pct = 0.30,
+    cutoff_base = 2000, release_base = 0.5 },
+  { name = "FUSION",          -- 1970s: Weather Report, Herbie, Return to Forever
+    bpm = 130, swing = 0.06, ghost_pct = 0.30, organ_pct = 0.45,
+    oct_pct = 0.20, rest_pct = 0.06, eighth_pct = 0.25,
+    cutoff_base = 2500, release_base = 0.4 },
+  { name = "SOUL JAZZ",       -- Jimmy Smith, Grant Green, Wes Montgomery
+    bpm = 92, swing = 0.25, ghost_pct = 0.18, organ_pct = 0.85,
+    oct_pct = 0.08, rest_pct = 0.04, eighth_pct = 0.06,
+    cutoff_base = 800, release_base = 1.3 },
+  { name = "LATIN",           -- Afro-Cuban, bossa: Jobim, Cal Tjader
+    bpm = 128, swing = 0.03, ghost_pct = 0.28, organ_pct = 0.50,
+    oct_pct = 0.18, rest_pct = 0.03, eighth_pct = 0.22,
+    cutoff_base = 1400, release_base = 0.5 },
+  { name = "BALLAD",          -- slow standards: My Funny Valentine, In a Sentimental Mood
+    bpm = 68, swing = 0.20, ghost_pct = 0.12, organ_pct = 0.80,
+    oct_pct = 0.06, rest_pct = 0.02, eighth_pct = 0.04,
+    cutoff_base = 700, release_base = 1.8 },
+  { name = "NEO SOUL",        -- D'Angelo, Erykah Badu, Robert Glasper
+    bpm = 82, swing = 0.28, ghost_pct = 0.22, organ_pct = 0.75,
+    oct_pct = 0.10, rest_pct = 0.06, eighth_pct = 0.08,
+    cutoff_base = 850, release_base = 1.4 },
+  { name = "MORPHING",        -- auto-evolves between all styles
+    bpm = 120, swing = 0.15, ghost_pct = 0.25, organ_pct = 0.6,
+    oct_pct = 0.15, rest_pct = 0.08, eighth_pct = 0.15,
+    cutoff_base = 1200, release_base = 0.8 },
+}
+local current_style = 1
+local morph_clock_id = nil
+local morph_target = {}
+local morph_progress = 0
+
+local function get_style()
+  return STYLES[current_style]
+end
+
+local function apply_style(s)
+  params:set("clock_tempo", s.bpm)
+  state.brightness_base = s.cutoff_base
+end
+
+local function start_morphing()
+  if morph_clock_id then return end
+  morph_clock_id = clock.run(function()
+    while true do
+      clock.sleep(rrange(12, 30))  -- morph every 12-30 seconds
+      -- pick random target style (not MORPHING itself)
+      local target_idx = math.random(1, #STYLES - 1)
+      local target = STYLES[target_idx]
+      local source = get_style()
+      -- gradually interpolate over 4 seconds
+      for step = 1, 20 do
+        local t = step / 20
+        STYLES[#STYLES].bpm = math.floor(source.bpm + (target.bpm - source.bpm) * t)
+        STYLES[#STYLES].swing = source.swing + (target.swing - source.swing) * t
+        STYLES[#STYLES].ghost_pct = source.ghost_pct + (target.ghost_pct - source.ghost_pct) * t
+        STYLES[#STYLES].organ_pct = source.organ_pct + (target.organ_pct - source.organ_pct) * t
+        STYLES[#STYLES].oct_pct = source.oct_pct + (target.oct_pct - source.oct_pct) * t
+        STYLES[#STYLES].rest_pct = source.rest_pct + (target.rest_pct - source.rest_pct) * t
+        STYLES[#STYLES].eighth_pct = source.eighth_pct + (target.eighth_pct - source.eighth_pct) * t
+        STYLES[#STYLES].cutoff_base = source.cutoff_base + (target.cutoff_base - source.cutoff_base) * t
+        STYLES[#STYLES].release_base = source.release_base + (target.release_base - source.release_base) * t
+        STYLES[#STYLES].name = ">" .. target.name:sub(1, 6)
+        apply_style(STYLES[#STYLES])
+        clock.sleep(0.2)
+      end
+      -- snap to target
+      for k, v in pairs(target) do STYLES[#STYLES][k] = v end
+      STYLES[#STYLES].name = ">" .. target.name:sub(1, 6)
+    end
+  end)
+end
+
+local function stop_morphing()
+  if morph_clock_id then
+    clock.cancel(morph_clock_id)
+    morph_clock_id = nil
+  end
+end
+
 local QUALITY_LIST = {
   "ionian", "dorian", "mixolydian", "aeolian",
   "melodic_minor", "phrygian", "locrian", "lydian"
@@ -131,7 +238,7 @@ local state = {
   rest_streak = 0,
   -- screen
   page = 1,
-  pages = {"PLAY", "FORM", "SOUND"},
+  pages = {"PLAY", "FORM", "SOUND", "STYLE"},
   -- sound
   preset_idx = 1,
   brightness_base = 1200,
@@ -464,7 +571,7 @@ end
 -------------------------------------------------
 local function get_voice_id()
   local vid = next_voice_id
-  next_voice_id = (next_voice_id % 12) + 1
+  next_voice_id = (next_voice_id % 16) + 1
   return vid
 end
 
@@ -486,8 +593,8 @@ local function perform_note(note, vel_float, duration_sec)
     engine.noteOff(vid)
   end)
 
-  -- LAYER 2: Ghost doubles (~25% chance)
-  if chance(0.25) then
+  -- LAYER 2: Ghost doubles
+  if chance(get_style().ghost_pct) then
     local ghost_intervals = {-1, 1, -2, 2, 3, 4, 7}
     local gi = ghost_intervals[math.random(#ghost_intervals)]
     local ghost_freq = MusicUtil.note_num_to_freq(note + gi)
@@ -501,10 +608,9 @@ local function perform_note(note, vel_float, duration_sec)
     end)
   end
 
-  -- LAYER 3: Octave variation (~15% chance)
-  -- sometimes drop an octave for depth, sometimes pop up for brightness
+  -- LAYER 3: Octave variation
   local step_in_bar = ((state.beat - 1) % 4) + 1
-  if chance(0.15) then
+  if chance(get_style().oct_pct) then
     local oct_shift = ({-12, 12, 12, 19, 24})[math.random(5)]  -- -oct, +oct, +oct, +oct+5th, +2oct
     local oct_note = note + oct_shift
     if oct_note >= 24 and oct_note <= 96 then
@@ -522,7 +628,7 @@ local function perform_note(note, vel_float, duration_sec)
 
   -- LAYER 4: Organ comping (subtle jazz chords on beats 1 & 3)
   -- voiced like a Hammond B3 — rootless voicings with 3rds, 7ths, 9ths, 13ths
-  if chance(0.6) and (step_in_bar == 1 or step_in_bar == 3) then
+  if chance(get_style().organ_pct) and (step_in_bar == 1 or step_in_bar == 3) then
     local chord = get_current_chord()
     if chord then
       local root = chord.root or note
@@ -1503,6 +1609,61 @@ local function draw_sound()
 end
 
 -------------------------------------------------
+-- SCREEN: STYLE page
+-------------------------------------------------
+local function draw_style()
+  local s = get_style()
+  -- Header
+  screen.level(15)
+  screen.move(2, 7)
+  screen.text("STYLE")
+  screen.level(state.playing and 15 or 4)
+  screen.move(120, 7)
+  screen.text(state.playing and ">" or ".")
+  screen.level(2)
+  screen.move(0, 9)
+  screen.line(128, 9)
+  screen.stroke()
+
+  -- Style name large
+  screen.level(15)
+  screen.font_size(12)
+  screen.move(4, 24)
+  screen.text(s.name)
+  screen.font_size(8)
+
+  -- Style params visualization
+  local params_y = 30
+  local function draw_bar(label, val, max_val, y)
+    screen.level(6)
+    screen.move(2, y + 6)
+    screen.text(label)
+    screen.level(3)
+    screen.rect(42, y + 1, 80, 4)
+    screen.stroke()
+    screen.level(10)
+    local w = math.floor((val / max_val) * 78)
+    screen.rect(43, y + 2, w, 2)
+    screen.fill()
+  end
+  draw_bar("BPM",    s.bpm,          220, params_y)
+  draw_bar("SWING",  s.swing,        0.3, params_y + 7)
+  draw_bar("GHOST",  s.ghost_pct,    0.5, params_y + 14)
+  draw_bar("ORGAN",  s.organ_pct,    1.0, params_y + 21)
+
+  -- Style list at bottom
+  screen.level(2)
+  screen.move(0, 55)
+  screen.line(128, 55)
+  screen.stroke()
+  screen.level(5)
+  screen.move(2, 63)
+  screen.text("E2:style  E3:bpm  K3:morph")
+
+  draw_page_dots()
+end
+
+-------------------------------------------------
 -- redraw (GLOBAL)
 -------------------------------------------------
 function redraw()
@@ -1517,6 +1678,8 @@ function redraw()
     draw_form()
   elseif state.page == 3 then
     draw_sound()
+  elseif state.page == 4 then
+    draw_style()
   end
 
   screen.update()
@@ -1561,6 +1724,19 @@ function key(n, z)
       -- SOUND: cycle preset
       state.preset_idx = (state.preset_idx % #PRESETS) + 1
       apply_preset(state.preset_idx)
+    elseif state.page == 4 then
+      -- STYLE: toggle morphing
+      if current_style == #STYLES then
+        -- already on MORPHING, turn it off and go to STRAIGHT AHEAD
+        stop_morphing()
+        current_style = 1
+        apply_style(get_style())
+      else
+        -- jump to MORPHING mode
+        current_style = #STYLES
+        apply_style(get_style())
+        start_morphing()
+      end
     end
   end
 
@@ -1582,6 +1758,12 @@ function enc(n, d)
     elseif state.page == 3 then
       -- SOUND: brightness
       state.brightness_base = clamp(state.brightness_base + d * 50, 400, 4000)
+    elseif state.page == 4 then
+      -- STYLE: select style
+      stop_morphing()
+      current_style = clamp(current_style + d, 1, #STYLES)
+      apply_style(get_style())
+      if current_style == #STYLES then start_morphing() end
     end
 
   elseif n == 3 then
@@ -1595,6 +1777,11 @@ function enc(n, d)
       -- SOUND: body (release)
       state.body_release = clamp(state.body_release + d * 0.05, 0.1, 2.0)
       params:set("env_2_release", state.body_release)
+    elseif state.page == 4 then
+      -- STYLE: fine-tune BPM within style
+      local s = get_style()
+      s.bpm = clamp(s.bpm + d, 50, 240)
+      apply_style(s)
     end
   end
 

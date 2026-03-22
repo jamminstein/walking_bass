@@ -517,7 +517,20 @@ local function perform_note(note, velocity, gate_beats, articulation)
   local amp = vel_to_amp(velocity)
   local decay = note_decay(note, articulation) * gate_beats * 1.8
 
-  engine_note(freq, amp, decay, articulation)
+  -- Direct MollyThePoly call for reliable sound
+  local vel = math.max(0.2, math.min(1.0, amp))
+  local vid = next_voice_id
+  engine.noteOn(vid, freq, vel)
+  clock.run(function()
+    local rel = math.max(0.15, decay * 0.5)
+    if articulation == "ghost" then rel = 0.08
+    elseif articulation == "sing" then rel = math.max(0.5, decay)
+    elseif articulation == "staccato" then rel = 0.06
+    end
+    clock.sleep(rel)
+    engine.noteOff(vid)
+  end)
+  next_voice_id = (next_voice_id % 8) + 1
   midi_note_off()
   midi_note_on(note, math.floor(velocity))
   if state.last_opxy_note then

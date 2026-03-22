@@ -415,12 +415,18 @@ end
 local function setup_engine_defaults()
   -- Warm bass preset for MollyThePoly
   params:set("osc_wave_shape", 0.3)
-  params:set("lp_filter_cutoff", 2400)
+  params:set("lp_filter_cutoff", 4000)
   params:set("lp_filter_resonance", 0.2)
-  params:set("env_2_attack", 0.005)
-  params:set("env_2_decay", 0.6)
-  params:set("env_2_sustain", 0.5)
-  params:set("env_2_release", 0.8)
+  params:set("env_2_attack", 0.002)
+  params:set("env_2_decay", 0.8)
+  params:set("env_2_sustain", 0.6)
+  params:set("env_2_release", 1.2)
+  -- test note to confirm engine is alive
+  engine.noteOn(9998, 220, 0.8)
+  clock.run(function()
+    clock.sleep(0.15)
+    engine.noteOff(9998)
+  end)
 end
 
 -------------------------------------------------
@@ -431,12 +437,13 @@ local next_voice_id = 1
 
 local function setup_engine_abstraction()
   eng.note_on = function(freq, amp, decay, articulation)
-    local vel = math.max(0.2, math.min(1.0, amp))
+    local vel = math.max(0.3, math.min(1.0, amp * 1.5))
+    print("wb eng.note_on freq=" .. math.floor(freq) .. " vel=" .. string.format("%.2f", vel) .. " id=" .. next_voice_id)
     engine.noteOn(next_voice_id, freq, vel)
     -- auto note-off after decay
     local vid = next_voice_id
     clock.run(function()
-      clock.sleep(math.max(0.1, decay * 0.5))
+      clock.sleep(math.max(0.2, decay * 0.6))
       engine.noteOff(vid)
     end)
     next_voice_id = (next_voice_id % 6) + 1

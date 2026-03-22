@@ -22,9 +22,8 @@
 -------------------------------------------------
 -- Engine
 -------------------------------------------------
-engine.name = "MollyThePoly"
-local MollyThePoly = require "molly_the_poly/lib/molly_the_poly_engine"
-local current_engine = "MollyThePoly"
+engine.name = "PolyPerc"
+local current_engine = "PolyPerc"
 
 local MusicUtil = require "musicutil"
 
@@ -403,30 +402,27 @@ local function engine_note(freq, amp, decay, articulation_name)
 end
 
 local function engine_click(freq, amp)
-  -- Click via short MollyThePoly note
-  local click_id = 9999
-  engine.noteOn(click_id, freq, math.min(1.0, amp))
+  engine.release(0.05)
+  engine.cutoff(3000)
+  engine.amp(math.min(1.0, amp))
+  engine.hz(freq)
+  -- restore bass settings after click
   clock.run(function()
-    clock.sleep(0.05)
-    engine.noteOff(click_id)
+    clock.sleep(0.1)
+    engine.release(0.5)
+    engine.cutoff(1800)
+    engine.amp(0.7)
   end)
 end
 
 local function setup_engine_defaults()
-  -- Warm bass preset for MollyThePoly
-  params:set("osc_wave_shape", 0.3)
-  params:set("lp_filter_cutoff", 4000)
-  params:set("lp_filter_resonance", 0.2)
-  params:set("env_2_attack", 0.002)
-  params:set("env_2_decay", 0.8)
-  params:set("env_2_sustain", 0.6)
-  params:set("env_2_release", 1.2)
-  -- test note to confirm engine is alive
-  engine.noteOn(9998, 220, 0.8)
-  clock.run(function()
-    clock.sleep(0.15)
-    engine.noteOff(9998)
-  end)
+  -- Warm bass preset for PolyPerc
+  engine.amp(0.7)
+  engine.release(0.5)
+  engine.cutoff(1800)
+  engine.pw(0.4)
+  -- test tone
+  engine.hz(110)
 end
 
 -------------------------------------------------
@@ -437,22 +433,17 @@ local next_voice_id = 1
 
 local function setup_engine_abstraction()
   eng.note_on = function(freq, amp, decay, articulation)
-    local vel = math.max(0.3, math.min(1.0, amp * 1.5))
-    print("wb eng.note_on freq=" .. math.floor(freq) .. " vel=" .. string.format("%.2f", vel) .. " id=" .. next_voice_id)
-    engine.noteOn(next_voice_id, freq, vel)
-    -- auto note-off after decay
-    local vid = next_voice_id
-    clock.run(function()
-      clock.sleep(math.max(0.2, decay * 0.6))
-      engine.noteOff(vid)
-    end)
-    next_voice_id = (next_voice_id % 6) + 1
+    -- set PolyPerc params per note for expression
+    local rel = math.max(0.1, math.min(2.0, decay * 0.5))
+    engine.release(rel)
+    engine.amp(math.max(0.3, math.min(1.0, amp)))
+    engine.hz(freq)
   end
   eng.note_off = function(voice_id)
-    -- handled by auto note-off above
+    -- PolyPerc handles decay automatically
   end
   eng.kill_all = function()
-    engine.noteKillAll()
+    -- PolyPerc voices self-terminate
   end
 end
 
@@ -1295,8 +1286,7 @@ end
 function init()
   math.randomseed(os.time())
 
-  -- Engine setup
-  MollyThePoly.add_params()
+  -- Engine setup (PolyPerc)
   setup_engine_abstraction()
 
   -- MIDI setup

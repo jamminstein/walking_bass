@@ -20,31 +20,11 @@
 --   row 8    = transport + page
 
 -------------------------------------------------
--- Engine selection (persisted)
+-- Engine
 -------------------------------------------------
-local ENGINE_OPTIONS = {"UprightBass", "AcidTest"}
-local engine_file = _path.data .. "walking_bass/engine_choice.txt"
-
-local function read_engine_choice()
-  local f = io.open(engine_file, "r")
-  if f then
-    local choice = f:read("*l")
-    f:close()
-    for _, name in ipairs(ENGINE_OPTIONS) do
-      if name == choice then return name end
-    end
-  end
-  return "UprightBass"
-end
-
-local function save_engine_choice(name)
-  util.make_dir(_path.data .. "walking_bass/")
-  local f = io.open(engine_file, "w")
-  if f then f:write(name); f:close() end
-end
-
-local current_engine = read_engine_choice()
-engine.name = current_engine
+engine.name = "MollyThePoly"
+local MollyThePoly = require "molly_the_poly/lib/molly_the_poly_engine"
+local current_engine = "MollyThePoly"
 
 local MusicUtil = require "musicutil"
 
@@ -417,83 +397,45 @@ end
 -- engine interface
 -------------------------------------------------
 local function engine_note(freq, amp, decay, articulation_name)
-  if eng.note_on then
+  if eng and eng.note_on then
     eng.note_on(freq, amp, decay, articulation_name)
-  else
-    -- Fallback for during initialization
-    local artic = ARTICULATION[articulation_name] or 0
-    engine.note(freq, amp, decay, artic)
   end
 end
 
 local function engine_click(freq, amp)
-  if current_engine == "UprightBass" then
-    engine.click(freq, amp)
-  end
-  -- AcidTest doesn't have click
+  -- Click sound via short PolyPerc hit
+  engine.hz(freq)
 end
 
 local function setup_engine_defaults()
-  if current_engine == "UprightBass" then
-    engine.body_tone(params:get("body_tone"))
-    engine.body_mix(params:get("body_mix"))
-    engine.finger_amt(params:get("finger_noise"))
-    engine.sympathetic_amt(params:get("resonance"))
-    engine.drift_amt(params:get("pitch_drift"))
-    engine.brightness_amt(params:get("brightness"))
-    engine.reverb_mix(params:get("reverb_mix"))
-    engine.reverb_room(params:get("reverb_room"))
-  elseif current_engine == "AcidTest" then
-    -- Initialize AcidTest delay if configured
-    if pcall(function() params:get("acid_delay_feedback") end) then
-      engine.acidTest_delay(60 / clock.get_tempo(), params:get("acid_delay_beats"), params:get("acid_delay_feedback"))
-    end
-  end
+  -- Warm bass preset for MollyThePoly
+  params:set("osc_wave_shape", 0.2)
+  params:set("lp_filter_cutoff", 800)
+  params:set("lp_filter_resonance", 0.15)
+  params:set("env_2_attack", 0.005)
+  params:set("env_2_decay", 0.4)
+  params:set("env_2_sustain", 0.3)
+  params:set("env_2_release", 0.5)
 end
 
 -------------------------------------------------
 -- Engine abstraction layer
 -------------------------------------------------
 local eng = {}
+local next_voice_id = 1
 
 local function setup_engine_abstraction()
-  if current_engine == "UprightBass" then
-    eng.note_on = function(freq, amp, decay, articulation)
-      local artic = ARTICULATION[articulation] or 0
-      engine.note(freq, amp, decay, artic)
-    end
-    eng.note_off = function(voice_id)
-      engine.noteOff(voice_id)
-    end
-    eng.kill_all = function()
-      for i = 0, 5 do engine.noteOff(i) end
-    end
-
-  elseif current_engine == "AcidTest" then
-    local acid_portamento = 0.05
-
-    eng.note_on = function(freq, amp, decay, articulation)
-      -- Convert freq to MIDI note
-      local note = math.floor(69 + 12 * math.log(freq / 440) / math.log(2) + 0.5)
-      -- Map articulation to portamento
-      local port = acid_portamento
-      if articulation == "sing" then port = 0.2 end     -- sing = long portamento
-      if articulation == "staccato" then port = 0 end    -- staccato = no portamento
-      if articulation == "ghost" then port = 0.01 end    -- ghost = quick
-
-      engine.acidTest_bass_gate(1)
-      engine.acidTest_bass(amp, note,
-        params:get("acid_delay_send"),
-        params:get("acid_reverb_send"),
-        port)
-    end
-    eng.note_off = function(voice_id)
-      engine.acidTest_bass_gate(0)
-    end
-    eng.kill_all = function()
-      engine.acidTest_bass_gate(0)
-      engine.acidTest_lead_gate(0)
-    end
+  eng.note_on = function(freq, amp, decay, articulation)
+    local note = math.floor(69 + 12 * math.log(freq / 440) / math.log(2) + 0.5)
+    local vel = math.max(0.1, math.min(1.0, amp))
+    engine.noteOn(next_voice_id, freq, vel)
+    next_voice_id = (next_voice_id % 6) + 1
+  end
+  eng.note_off = function(voice_id)
+    engine.noteOff(voice_id)
+  end
+  eng.kill_all = function()
+    engine.noteKillAll()
   end
 end
 
@@ -1335,6 +1277,10 @@ end
 -------------------------------------------------
 function init()
   math.randomseed(os.time())
+
+  -- Engine setup
+  MollyThePoly.add_params()
+  setup_engine_abstraction()
 
   -- MIDI setup
   midi_out = midi.connect(1)

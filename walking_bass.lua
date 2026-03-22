@@ -22,8 +22,9 @@
 -------------------------------------------------
 -- Engine
 -------------------------------------------------
-engine.name = "PolyPerc"
-local current_engine = "PolyPerc"
+engine.name = "MollyThePoly"
+local MollyThePoly = require "molly_the_poly/lib/molly_the_poly_engine"
+local current_engine = "MollyThePoly"
 
 local MusicUtil = require "musicutil"
 
@@ -403,27 +404,31 @@ local function engine_note(freq, amp, decay, articulation_name)
 end
 
 local function engine_click(freq, amp)
-  engine.release(0.05)
-  engine.cutoff(3000)
-  engine.amp(math.min(1.0, amp))
-  engine.hz(freq)
-  -- restore bass settings after click
+  -- short click via MollyThePoly
+  engine.noteOn(9998, freq, math.min(1.0, amp))
   clock.run(function()
-    clock.sleep(0.1)
-    engine.release(0.5)
-    engine.cutoff(1800)
-    engine.amp(0.7)
+    clock.sleep(0.04)
+    engine.noteOff(9998)
   end)
 end
 
 local function setup_engine_defaults()
-  -- Warm bass preset for PolyPerc
-  engine.amp(0.7)
-  engine.release(0.5)
-  engine.cutoff(1800)
-  engine.pw(0.4)
-  -- test tone
-  engine.hz(110)
+  -- Upright bass preset for MollyThePoly
+  params:set("osc_wave_shape", 0.15)       -- mostly sine, slight saw
+  params:set("noise_level", 0.02)          -- touch of finger noise
+  params:set("lp_filter_cutoff", 1800)     -- warm, not bright
+  params:set("lp_filter_resonance", 0.12)  -- gentle bump
+  params:set("env_2_attack", 0.008)        -- pluck attack
+  params:set("env_2_decay", 0.5)           -- medium sustain
+  params:set("env_2_sustain", 0.35)        -- some body
+  params:set("env_2_release", 0.8)         -- natural ring-out
+  params:set("sub_osc_level", 0.25)        -- sub octave for depth
+  -- test note
+  engine.noteOn(9999, 110, 0.7)
+  clock.run(function()
+    clock.sleep(0.2)
+    engine.noteOff(9999)
+  end)
 end
 
 -------------------------------------------------
@@ -434,17 +439,28 @@ local next_voice_id = 1
 
 local function setup_engine_abstraction()
   eng.note_on = function(freq, amp, decay, articulation)
-    -- set PolyPerc params per note for expression
-    local rel = math.max(0.1, math.min(2.0, decay * 0.5))
-    engine.release(rel)
-    engine.amp(math.max(0.3, math.min(1.0, amp)))
-    engine.hz(freq)
+    local vel = math.max(0.2, math.min(1.0, amp))
+    -- let notes overlap slightly for natural feel
+    engine.noteOn(next_voice_id, freq, vel)
+    local vid = next_voice_id
+    local release_time = math.max(0.15, decay * 0.6)
+    -- ghost notes decay faster, sing notes ring longer
+    if articulation == "ghost" then release_time = 0.08
+    elseif articulation == "sing" then release_time = math.max(0.5, decay)
+    elseif articulation == "staccato" then release_time = 0.06
+    elseif articulation == "lead_in" then release_time = math.max(0.3, decay * 0.8)
+    end
+    clock.run(function()
+      clock.sleep(release_time)
+      engine.noteOff(vid)
+    end)
+    next_voice_id = (next_voice_id % 8) + 1
   end
   eng.note_off = function(voice_id)
-    -- PolyPerc handles decay automatically
+    engine.noteOff(voice_id)
   end
   eng.kill_all = function()
-    -- PolyPerc voices self-terminate
+    engine.noteKillAll()
   end
 end
 
@@ -501,38 +517,7 @@ local function perform_note(note, velocity, gate_beats, articulation)
   local amp = vel_to_amp(velocity)
   local decay = note_decay(note, articulation) * gate_beats * 1.8
 
-  -- Shape sound per articulation + velocity-responsive filter
-  local vel_factor = amp / 0.8  -- normalized around typical amp
-  local cut = 800 + vel_factor * 1200 + math.random(-200, 200)
-  local rel = math.max(0.15, decay * 0.5)
-  local pw = 0.35 + math.random() * 0.15
-  if articulation == "ghost" then
-    cut = 400 + math.random(0, 200)
-    rel = 0.08 + math.random() * 0.04
-    pw = 0.48 + math.random() * 0.04
-  elseif articulation == "dig" then
-    cut = 2500 + math.random(0, 1000)
-    rel = math.max(0.2, decay * 0.7)
-    pw = 0.25 + math.random() * 0.1
-  elseif articulation == "sing" then
-    cut = 1400 + math.random(0, 400)
-    rel = math.max(0.4, decay * 0.9)
-    pw = 0.42 + math.random() * 0.06
-  elseif articulation == "staccato" then
-    cut = 1800 + math.random(0, 600)
-    rel = 0.06 + math.random() * 0.03
-    pw = 0.3 + math.random() * 0.1
-  elseif articulation == "lead_in" then
-    cut = 2000 + math.random(0, 500)
-    rel = math.max(0.25, decay * 0.65)
-    pw = 0.38 + math.random() * 0.08
-  end
-  engine.pw(pw)
-  engine.release(rel)
-  engine.cutoff(cut)
-  engine.amp(math.min(1.0, amp * 1.2))
-  engine.hz(freq)
-  print("WB NOTE: " .. note .. " freq=" .. math.floor(freq) .. " amp=" .. string.format("%.2f", amp))
+  engine_note(freq, amp, decay, articulation)
   midi_note_off()
   midi_note_on(note, math.floor(velocity))
   if state.last_opxy_note then
@@ -1319,7 +1304,8 @@ end
 function init()
   math.randomseed(os.time())
 
-  -- Engine setup (PolyPerc)
+  -- Engine setup (MollyThePoly)
+  MollyThePoly.add_params()
   setup_engine_abstraction()
 
   -- MIDI setup

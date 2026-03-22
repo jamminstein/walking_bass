@@ -540,16 +540,39 @@ local function perform_note(note, vel_float, duration_sec)
       local chord_base = 60 + (root % 12)
       local chord_vel = clamp(vel * rrange(0.08, 0.15), 0.03, 0.18)
       local chord_dur = rrange(0.6, 1.2)  -- sustained, organ-like
+      -- send organ chord notes to engine + MIDI + OP-XY
+      local midi_ch = params:get("midi_channel")
+      local organ_ch = math.min(16, midi_ch + 1)  -- organ on next MIDI channel
+      local opxy_ch = params:get("opxy_channel")
+      local opxy_organ_ch = math.min(8, opxy_ch + 1)
+      local midi_vel = math.floor(chord_vel * 127)
       for _, interval in ipairs(v) do
         local cn = chord_base + interval
         if cn <= 84 then
           local cvid = get_voice_id()
           local cf = MusicUtil.note_num_to_freq(cn)
+          local this_cn = cn
           clock.run(function()
-            clock.sleep(rrange(0.01, 0.04))  -- slight stagger for human feel
+            local stagger = rrange(0.01, 0.04)
+            clock.sleep(stagger)
+            -- internal engine
             engine.noteOn(cvid, cf, chord_vel)
+            -- MIDI out on organ channel
+            if midi_out then
+              midi_out:note_on(this_cn, midi_vel, organ_ch)
+            end
+            -- OP-XY on organ channel
+            if opxy_out then
+              opxy_out:note_on(this_cn, midi_vel, opxy_organ_ch)
+            end
             clock.sleep(chord_dur + rrange(-0.1, 0.1))
             engine.noteOff(cvid)
+            if midi_out then
+              midi_out:note_off(this_cn, 0, organ_ch)
+            end
+            if opxy_out then
+              opxy_out:note_off(this_cn, 0, opxy_organ_ch)
+            end
           end)
         end
       end

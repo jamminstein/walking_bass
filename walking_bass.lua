@@ -409,13 +409,13 @@ end
 
 local function setup_engine_defaults()
   -- Warm bass preset for MollyThePoly
-  params:set("osc_wave_shape", 0.2)
-  params:set("lp_filter_cutoff", 800)
-  params:set("lp_filter_resonance", 0.15)
+  params:set("osc_wave_shape", 0.3)
+  params:set("lp_filter_cutoff", 2400)
+  params:set("lp_filter_resonance", 0.2)
   params:set("env_2_attack", 0.005)
-  params:set("env_2_decay", 0.4)
-  params:set("env_2_sustain", 0.3)
-  params:set("env_2_release", 0.5)
+  params:set("env_2_decay", 0.6)
+  params:set("env_2_sustain", 0.5)
+  params:set("env_2_release", 0.8)
 end
 
 -------------------------------------------------
@@ -426,13 +426,18 @@ local next_voice_id = 1
 
 local function setup_engine_abstraction()
   eng.note_on = function(freq, amp, decay, articulation)
-    local note = math.floor(69 + 12 * math.log(freq / 440) / math.log(2) + 0.5)
-    local vel = math.max(0.1, math.min(1.0, amp))
+    local vel = math.max(0.2, math.min(1.0, amp))
     engine.noteOn(next_voice_id, freq, vel)
+    -- auto note-off after decay
+    local vid = next_voice_id
+    clock.run(function()
+      clock.sleep(math.max(0.1, decay * 0.5))
+      engine.noteOff(vid)
+    end)
     next_voice_id = (next_voice_id % 6) + 1
   end
   eng.note_off = function(voice_id)
-    engine.noteOff(voice_id)
+    -- handled by auto note-off above
   end
   eng.kill_all = function()
     engine.noteKillAll()

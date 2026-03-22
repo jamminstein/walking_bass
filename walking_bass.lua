@@ -1692,7 +1692,7 @@ function key(n, z)
   if z == 0 then return end
 
   if n == 2 then
-    -- play/stop on all pages
+    -- K2: play/stop on all pages
     if state.playing then
       state.playing = false
       midi_note_off()
@@ -1708,36 +1708,8 @@ function key(n, z)
     end
 
   elseif n == 3 then
-    if state.page == 1 then
-      -- PLAY: reset + play
-      reset_player()
-      if params:get("trainer_enabled") == 2 then
-        state.ramp_active = true
-        state.clean_bars = 0
-        state.last_rest_occurred = false
-      end
-      start_count_in()
-    elseif state.page == 2 then
-      -- FORM: randomize progression order
-      randomize_progression()
-    elseif state.page == 3 then
-      -- SOUND: cycle preset
-      state.preset_idx = (state.preset_idx % #PRESETS) + 1
-      apply_preset(state.preset_idx)
-    elseif state.page == 4 then
-      -- STYLE: toggle morphing
-      if current_style == #STYLES then
-        -- already on MORPHING, turn it off and go to STRAIGHT AHEAD
-        stop_morphing()
-        current_style = 1
-        apply_style(get_style())
-      else
-        -- jump to MORPHING mode
-        current_style = #STYLES
-        apply_style(get_style())
-        start_morphing()
-      end
-    end
+    -- K3: cycle pages
+    state.page = (state.page % #state.pages) + 1
   end
 
   screen_dirty = true
@@ -1745,8 +1717,20 @@ end
 
 function enc(n, d)
   if n == 1 then
-    -- page select
-    state.page = clamp(state.page + (d > 0 and 1 or -1), 1, #state.pages)
+    -- E1: page-specific action
+    if state.page == 1 then
+      swing_amount = clamp(swing_amount + d * 0.01, 0, 0.3)
+    elseif state.page == 2 then
+      params:delta("progression", d)
+    elseif state.page == 3 then
+      state.preset_idx = clamp(state.preset_idx + d, 1, #PRESETS)
+      apply_preset(state.preset_idx)
+    elseif state.page == 4 then
+      stop_morphing()
+      current_style = clamp(current_style + d, 1, #STYLES)
+      apply_style(get_style())
+      if current_style == #STYLES then start_morphing() end
+    end
 
   elseif n == 2 then
     if state.page == 1 then

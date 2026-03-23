@@ -1651,10 +1651,10 @@ local function draw_style()
 
   screen.level(6)
   screen.move(2, 63)
-  screen.text("E2:style  E3:bpm")
-  screen.level(current_style == #STYLES and 15 or 5)
-  screen.move(88, 63)
-  screen.text("K3:morph")
+  screen.text("E2:style  E3:morph")
+  screen.level(current_style == #STYLES and 15 or 4)
+  screen.move(96, 63)
+  screen.text(math.floor(clock.get_tempo()) .. "bpm")
 
   -- page dots
   for i = 1, #state.pages do
@@ -1709,21 +1709,9 @@ function key(n, z)
     end
 
   elseif n == 3 then
-    if state.page == 4 then
-      -- K3 on STYLE page: toggle morphing
-      if current_style == #STYLES then
-        stop_morphing()
-        current_style = 1
-        apply_style(get_style())
-      else
-        current_style = #STYLES
-        apply_style(get_style())
-        start_morphing()
-      end
-    else
-      -- K3 on other pages: cycle pages
-      state.page = (state.page % #state.pages) + 1
-    end
+    -- K3 always cycles pages
+    state.page = (state.page % #state.pages) + 1
+    screen_dirty = true
   end
 
   screen_dirty = true
@@ -1779,10 +1767,20 @@ function enc(n, d)
       state.body_release = clamp(state.body_release + d * 0.05, 0.1, 2.0)
       params:set("env_2_release", state.body_release)
     elseif state.page == 4 then
-      -- STYLE: fine-tune BPM within style
-      local s = get_style()
-      s.bpm = clamp(s.bpm + d, 50, 240)
-      apply_style(s)
+      -- STYLE E3: toggle morphing on/off
+      if d > 0 then
+        if current_style ~= #STYLES then
+          current_style = #STYLES
+          apply_style(get_style())
+          start_morphing()
+        end
+      else
+        if current_style == #STYLES then
+          stop_morphing()
+          current_style = 1
+          apply_style(get_style())
+        end
+      end
     end
   end
 

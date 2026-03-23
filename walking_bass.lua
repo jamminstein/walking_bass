@@ -1718,22 +1718,8 @@ function key(n, z)
 end
 
 function enc(n, d)
-  print("WB ENC n=" .. n .. " d=" .. d .. " page=" .. state.page)
   if n == 1 then
-    -- E1: page-specific action
-    if state.page == 1 then
-      swing_amount = clamp(swing_amount + d * 0.01, 0, 0.3)
-    elseif state.page == 2 then
-      params:delta("progression", d)
-    elseif state.page == 3 then
-      state.preset_idx = clamp(state.preset_idx + d, 1, #PRESETS)
-      apply_preset(state.preset_idx)
-    elseif state.page == 4 then
-      stop_morphing()
-      current_style = clamp(current_style + d, 1, #STYLES)
-      apply_style(get_style())
-      if current_style == #STYLES then start_morphing() end
-    end
+    -- E1: norns system (not used by script)
 
   elseif n == 2 then
     if state.page == 1 then

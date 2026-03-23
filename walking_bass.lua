@@ -1757,7 +1757,9 @@ function enc(n, d)
       -- STYLE: select style
       stop_morphing()
       current_style = clamp(current_style + d, 1, #STYLES)
-      apply_style(get_style())
+      local s = get_style()
+      print("WB STYLE: " .. s.name .. " bpm=" .. s.bpm .. " cut=" .. s.cutoff_base)
+      apply_style(s)
       if current_style == #STYLES then start_morphing() end
     end
 

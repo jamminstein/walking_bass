@@ -103,18 +103,16 @@ local function get_style()
 end
 
 local function apply_style(s)
-  -- tempo: try both methods
+  -- tempo
   clock.tempo = s.bpm
   pcall(function() params:set("clock_tempo", s.bpm) end)
-  -- immediate sound change
+  -- sound
   state.brightness_base = s.cutoff_base
-  params:set("lp_filter_cutoff", s.cutoff_base)
-  params:set("env_2_release", s.release_base)
-  -- update swing
+  pcall(function() params:set("lp_filter_cutoff", s.cutoff_base) end)
+  pcall(function() params:set("env_2_release", s.release_base) end)
+  -- swing
   swing_amount = s.swing
-  -- force screen redraw
   screen_dirty = true
-  print("STYLE: " .. s.name .. " tempo=" .. clock.get_tempo())
 end
 
 local function start_morphing()
@@ -1737,7 +1735,6 @@ function enc(n, d)
       stop_morphing()
       current_style = clamp(current_style + d, 1, #STYLES)
       local s = get_style()
-      print("WB STYLE: " .. s.name .. " bpm=" .. s.bpm .. " cut=" .. s.cutoff_base)
       apply_style(s)
       if current_style == #STYLES then start_morphing() end
     end

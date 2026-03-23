@@ -102,18 +102,15 @@ local function get_style()
   return STYLES[current_style]
 end
 
-local style_apply_pending = false
 local function apply_style(s)
+  -- immediate tempo change
+  clock.tempo = s.bpm
+  -- immediate sound change
   state.brightness_base = s.cutoff_base
-  -- debounce tempo change (expensive)
-  if not style_apply_pending then
-    style_apply_pending = true
-    clock.run(function()
-      clock.sleep(0.1)
-      params:set("clock_tempo", s.bpm)
-      style_apply_pending = false
-    end)
-  end
+  params:set("lp_filter_cutoff", s.cutoff_base)
+  params:set("env_2_release", s.release_base)
+  -- update swing
+  swing_amount = s.swing
 end
 
 local function start_morphing()

@@ -102,9 +102,18 @@ local function get_style()
   return STYLES[current_style]
 end
 
+local style_apply_pending = false
 local function apply_style(s)
-  params:set("clock_tempo", s.bpm)
   state.brightness_base = s.cutoff_base
+  -- debounce tempo change (expensive)
+  if not style_apply_pending then
+    style_apply_pending = true
+    clock.run(function()
+      clock.sleep(0.1)
+      params:set("clock_tempo", s.bpm)
+      style_apply_pending = false
+    end)
+  end
 end
 
 local function start_morphing()
@@ -633,13 +642,14 @@ local function perform_note(note, vel_float, duration_sec)
     if chord then
       local root = chord.root or note
       -- rootless jazz voicings: 3rd, 7th, 9th (or 3rd, 6th, 9th)
+      -- 2-note rootless voicings (lighter on CPU)
       local voicings = {
-        {3, 10, 14},     -- min7: b3, b7, 9
-        {4, 11, 14},     -- maj7: 3, 7, 9
-        {4, 10, 14},     -- dom7: 3, b7, 9
-        {3, 10, 14, 17}, -- min9: b3, b7, 9, 11
-        {4, 10, 13},     -- dom13: 3, b7, b13
-        {3, 7, 10},      -- min: b3, 5, b7
+        {3, 10},     -- min7: b3, b7
+        {4, 11},     -- maj7: 3, 7
+        {4, 10},     -- dom7: 3, b7
+        {3, 14},     -- min9: b3, 9
+        {7, 10},     -- min: 5, b7
+        {4, 7},      -- maj: 3, 5
       }
       local v = voicings[math.random(#voicings)]
       -- place chord in mid register (MIDI 60-72 range)

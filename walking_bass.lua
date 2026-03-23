@@ -559,20 +559,17 @@ end
 -------------------------------------------------
 -- per-note filter shaping
 -------------------------------------------------
+-- lightweight filter shape (no params:set per note)
+local last_filter_set = 0
 local function shape_note_filter(note)
-  local lo = params:get("low_note")
-  local hi = params:get("high_note")
-  local range = hi - lo
-  if range <= 0 then range = 24 end
-  local pos = clamp((note - lo) / range, 0, 1)
-  -- low notes dark, high notes brighter + random variation
-  local cutoff = state.brightness_base * (0.5 + pos * 1.5)
-  cutoff = cutoff + math.random(-200, 200)  -- timbre variation per note
-  cutoff = clamp(cutoff, 400, 5000)
+  local now = os.clock()
+  if now - last_filter_set < 0.2 then return end  -- throttle to 5hz max
+  last_filter_set = now
+  local lo = 36
+  local hi = 72
+  local pos = clamp((note - lo) / (hi - lo), 0, 1)
+  local cutoff = clamp(state.brightness_base * (0.5 + pos * 1.5), 400, 5000)
   params:set("lp_filter_cutoff", cutoff)
-  -- vary pulse width slightly for each note (organic feel)
-  local pw = 0.3 + math.random() * 0.25
-  params:set("osc_wave_shape", pw)
 end
 
 -------------------------------------------------
@@ -580,7 +577,7 @@ end
 -------------------------------------------------
 local function get_voice_id()
   local vid = next_voice_id
-  next_voice_id = (next_voice_id % 16) + 1
+  next_voice_id = (next_voice_id % 8) + 1
   return vid
 end
 
@@ -594,106 +591,85 @@ local function perform_note(note, vel_float, duration_sec)
   -- shape filter per note register
   shape_note_filter(note)
 
-  -- LAYER 1: Root walker (main voice)
+  -- ALL LAYERS IN ONE COROUTINE (saves CPU)
+  local sty = get_style()
+  local step_in_bar = ((state.beat - 1) % 4) + 1
+  local do_ghost = chance(sty.ghost_pct)
+  local do_oct = chance(sty.oct_pct)
+  local do_organ = chance(sty.organ_pct) and (step_in_bar == 1 or step_in_bar == 3)
+
+  -- LAYER 1: Root walker (immediate)
   local vid = get_voice_id()
   engine.noteOn(vid, freq, vel)
-  clock.run(function()
-    clock.sleep(math.max(0.1, duration_sec * 0.85))
-    engine.noteOff(vid)
-  end)
 
-  -- LAYER 2: Ghost doubles
-  if chance(get_style().ghost_pct) then
-    local ghost_intervals = {-1, 1, -2, 2, 3, 4, 7}
-    local gi = ghost_intervals[math.random(#ghost_intervals)]
-    local ghost_freq = MusicUtil.note_num_to_freq(note + gi)
-    local ghost_vel = clamp(vel * rrange(0.15, 0.25), 0.05, 0.3)
-    local ghost_vid = get_voice_id()
-    clock.run(function()
-      clock.sleep(rrange(0.02, 0.05))
-      engine.noteOn(ghost_vid, ghost_freq, ghost_vel)
-      clock.sleep(rrange(0.05, 0.12))
-      engine.noteOff(ghost_vid)
-    end)
+  -- LAYER 2: Ghost (immediate, no delay)
+  local ghost_vid = nil
+  if do_ghost then
+    local gi = ({-1, 1, -2, 2, 7})[math.random(5)]
+    ghost_vid = get_voice_id()
+    engine.noteOn(ghost_vid, MusicUtil.note_num_to_freq(note + gi), vel * 0.2)
   end
 
-  -- LAYER 3: Octave variation
-  local step_in_bar = ((state.beat - 1) % 4) + 1
-  if chance(get_style().oct_pct) then
-    local oct_shift = ({-12, 12, 12, 19, 24})[math.random(5)]  -- -oct, +oct, +oct, +oct+5th, +2oct
-    local oct_note = note + oct_shift
+  -- LAYER 3: Octave pop (immediate)
+  local oct_vid = nil
+  if do_oct then
+    local oct_note = note + ({-12, 12, 19})[math.random(3)]
     if oct_note >= 24 and oct_note <= 96 then
-      local oct_freq = MusicUtil.note_num_to_freq(oct_note)
-      local oct_vel = clamp(vel * rrange(0.12, 0.22), 0.05, 0.25)
-      local oct_vid = get_voice_id()
-      clock.run(function()
-        clock.sleep(rrange(0.005, 0.02))
-        engine.noteOn(oct_vid, oct_freq, oct_vel)
-        clock.sleep(rrange(0.04, 0.1))
-        engine.noteOff(oct_vid)
-      end)
+      oct_vid = get_voice_id()
+      engine.noteOn(oct_vid, MusicUtil.note_num_to_freq(oct_note), vel * 0.15)
     end
   end
 
-  -- LAYER 4: Organ comping (subtle jazz chords on beats 1 & 3)
-  -- voiced like a Hammond B3 — rootless voicings with 3rds, 7ths, 9ths, 13ths
-  if chance(get_style().organ_pct) and (step_in_bar == 1 or step_in_bar == 3) then
+  -- LAYER 4: Organ (immediate, 2 notes)
+  local organ_vids = {}
+  local organ_notes = {}
+  if do_organ then
     local chord = get_current_chord()
     if chord then
       local root = chord.root or note
-      -- rootless jazz voicings: 3rd, 7th, 9th (or 3rd, 6th, 9th)
-      -- 2-note rootless voicings (lighter on CPU)
-      local voicings = {
-        {3, 10},     -- min7: b3, b7
-        {4, 11},     -- maj7: 3, 7
-        {4, 10},     -- dom7: 3, b7
-        {3, 14},     -- min9: b3, 9
-        {7, 10},     -- min: 5, b7
-        {4, 7},      -- maj: 3, 5
-      }
+      local voicings = {{3,10},{4,11},{4,10},{3,14},{7,10},{4,7}}
       local v = voicings[math.random(#voicings)]
-      -- place chord in mid register (MIDI 60-72 range)
       local chord_base = 60 + (root % 12)
-      local chord_vel = clamp(vel * rrange(0.08, 0.15), 0.03, 0.18)
-      local chord_dur = rrange(0.6, 1.2)  -- sustained, organ-like
-      -- send organ chord notes to engine + MIDI + OP-XY
-      local midi_ch = params:get("midi_channel")
-      local organ_ch = math.min(16, midi_ch + 1)  -- organ on next MIDI channel
-      local opxy_ch = params:get("opxy_channel")
-      local opxy_organ_ch = math.min(8, opxy_ch + 1)
-      local midi_vel = math.floor(chord_vel * 127)
       for _, interval in ipairs(v) do
         local cn = chord_base + interval
         if cn <= 84 then
           local cvid = get_voice_id()
-          local cf = MusicUtil.note_num_to_freq(cn)
-          local this_cn = cn
-          clock.run(function()
-            local stagger = rrange(0.01, 0.04)
-            clock.sleep(stagger)
-            -- internal engine
-            engine.noteOn(cvid, cf, chord_vel)
-            -- MIDI out on organ channel
-            if midi_out then
-              midi_out:note_on(this_cn, midi_vel, organ_ch)
-            end
-            -- OP-XY on organ channel
-            if opxy_out then
-              opxy_out:note_on(this_cn, midi_vel, opxy_organ_ch)
-            end
-            clock.sleep(chord_dur + rrange(-0.1, 0.1))
-            engine.noteOff(cvid)
-            if midi_out then
-              midi_out:note_off(this_cn, 0, organ_ch)
-            end
-            if opxy_out then
-              opxy_out:note_off(this_cn, 0, opxy_organ_ch)
-            end
-          end)
+          engine.noteOn(cvid, MusicUtil.note_num_to_freq(cn), vel * 0.12)
+          table.insert(organ_vids, cvid)
+          table.insert(organ_notes, cn)
+          -- MIDI organ
+          if midi_out then midi_out:note_on(cn, math.floor(vel * 15), math.min(16, midi_channel + 1)) end
+          if opxy_out then opxy_out:note_on(cn, math.floor(vel * 15), math.min(8, params:get("opxy_channel") + 1)) end
         end
       end
     end
   end
+
+  -- SINGLE coroutine for ALL note-offs
+  clock.run(function()
+    -- ghost off first (short)
+    if ghost_vid then
+      clock.sleep(0.08)
+      engine.noteOff(ghost_vid)
+    end
+    -- octave off (very short)
+    if oct_vid then
+      clock.sleep(0.03)
+      engine.noteOff(oct_vid)
+    end
+    -- main note off
+    clock.sleep(math.max(0.05, duration_sec * 0.7))
+    engine.noteOff(vid)
+    -- organ off (longest)
+    if #organ_vids > 0 then
+      clock.sleep(0.3)
+      for i, cvid in ipairs(organ_vids) do
+        engine.noteOff(cvid)
+        if midi_out then midi_out:note_off(organ_notes[i], 0, math.min(16, midi_channel + 1)) end
+        if opxy_out then opxy_out:note_off(organ_notes[i], 0, math.min(8, params:get("opxy_channel") + 1)) end
+      end
+    end
+  end)
 
   -- MIDI out
   midi_note_off()

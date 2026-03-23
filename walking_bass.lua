@@ -1727,6 +1727,7 @@ function key(n, z)
 end
 
 function enc(n, d)
+  print("WB ENC n=" .. n .. " d=" .. d .. " page=" .. state.page)
   if n == 1 then
     -- E1: page-specific action
     if state.page == 1 then

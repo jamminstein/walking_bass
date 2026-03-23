@@ -111,6 +111,9 @@ local function apply_style(s)
   params:set("env_2_release", s.release_base)
   -- update swing
   swing_amount = s.swing
+  -- force screen redraw
+  screen_dirty = true
+  print("STYLE APPLIED: " .. s.name .. " " .. s.bpm .. "bpm swing=" .. string.format("%.2f", s.swing))
 end
 
 local function start_morphing()
